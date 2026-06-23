@@ -27,10 +27,13 @@ PKG="pkg -o ABI=FreeBSD:15:amd64 -o IGNORE_OSVERSION=yes"
 echo "=== pkg update (fetch meta.conf + catalog from the flat Release repo) ==="
 $PKG update -f
 
-echo "=== rquery the published NextBSD repo ==="
-$PKG rquery -r NextBSD '%n %v  (flatsize %sb bytes)' '*'
+echo "=== search the NextBSD repo (proves the published catalog is queryable) ==="
+$PKG search -r NextBSD NextBSD
+
+echo "=== rquery the package (name pattern, not a literal glob) ==="
+$PKG rquery -r NextBSD '%n %v (flatsize %sb)' NextBSD-darwin-runtime || true
 
 echo "=== dry-run install resolution ==="
-$PKG install -n -y NextBSD-darwin-runtime || true
+$PKG install -n -y NextBSD-darwin-runtime
 
-echo "OK: flat pkg repo on GitHub Release assets is readable by pkg(8)"
+echo "OK: flat pkg repo on GitHub Release assets is readable + resolvable by pkg(8)"
