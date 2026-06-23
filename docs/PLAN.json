@@ -1,0 +1,248 @@
+{
+  "abi": "nextbsd:15:amd64 and nextbsd:15:arm64. Rationale: NextBSD is KBI/ABI FreeBSD-15.1-compatible (REVISION stays 15.x, __FreeBSD__=15, ELF brand unchanged, libc.so.7/libpam.so.6 SONAMEs), so the underlying pkg-detected ABI on a booted image is still FreeBSD:15:<arch>. But the maintainer constraint mandates a DISTINCT NextBSD-namespaced repo/ABI to avoid colliding with FreeBSD ports/pkgbase. Set ABI=nextbsd:15:<arch> on the packages and in repo.conf, and rely on pkg's ALTABI/IGNORE_OSVERSION juggling at install time (the assembler already passes ABI= and IGNORE_OSVERSION=yes). Each per-arch release ships a repo.conf hardcoding its own arch in the URL; no ${ABI} substitution. The FreeBSD ports repo (llvm19/cmake/ninja build tools) remains a SEPARATE repo at FreeBSD:15:<arch> — the two repos coexist on one rootfs, NextBSD repo pinned higher priority for the world set.",
+  "packages": [
+    {
+      "name": "NextBSD-base",
+      "version_scheme": "15.1.<__FreeBSD_version=1501000>.<snapshotdate>+g<compat-short-sha>, e.g. 15.1.1501000.20260621-141500+g22cd273. Read __FreeBSD_version from usr/include/sys/param.h in the extracted tar; snapshotdate+sha from `gh release view continuous --repo nextbsd-redux/nextbsd-freebsd-compat --json publishedAt,targetCommitish`.",
+      "source": "nextbsd-freebsd-compat continuous: nextbsd-base-<arch>.tar.gz",
+      "contents": "Runtime base: /lib + /libexec (ld-elf.so.1 + 32 runtime .so), usr/lib runtime .so + 24 pam_*.so + libpam.so.6, /bin, /sbin, usr/bin, usr/sbin, usr/libexec (getty, save-entropy), usr/libdata/pkgconfig, usr/share (zoneinfo, certs, vt, nls, mk, keys). Strip leading './' from tar entries when building the plist. EXCLUDES .a, dev .so symlinks, usr/include, usr/lib/debug, boot/.",
+      "deps": [],
+      "notes": "Per MEMORY no-clobber-apple-libs: this is the PRODUCER-side package; the CLOBBER filtering happens at ASSEMBLER install time / via a curated pkglist, NOT by dropping the whole tree here — package faithfully but the consumer install order lays Darwin runtime AFTER base so Apple-adjacent libs win. RE-APPLY setuid in the plist: su=4555, login=4555; verify whether passwd is intentionally non-suid (Apple/launchd auth model) before forcing 4555 — ship as-shipped (0555) and flag. Do NOT wire ldconfig into a boot job; do NOT add rc.d. Provides the FreeBSD-private SONAMEs (libprivatesqlite3/ucl/zstd, krb5 .so.122) — list them as provides to avoid ports collisions."
+    },
+    {
+      "name": "NextBSD-base-dev",
+      "version_scheme": "EXACT same version string as NextBSD-base (version-locked).",
+      "source": "nextbsd-freebsd-compat continuous: nextbsd-base-<arch>.tar.gz",
+      "contents": "usr/include (3251 headers incl c++/v1, sys, dev, openssl, krb5, security/*pam*), usr/lib static .a, usr/lib dev .so symlinks, crt*.o/Scrt1.o/gcrt1.o.",
+      "deps": [
+        "NextBSD-base = <exact same version>"
+      ],
+      "notes": "SDK/link-time only; excluded from end-user ISO pkglist. Version-locked to base because mixing toolchain headers across snapshots is ABI-incompatible."
+    },
+    {
+      "name": "NextBSD-base-dbg",
+      "version_scheme": "EXACT same version string as NextBSD-base.",
+      "source": "nextbsd-freebsd-compat continuous: nextbsd-base-<arch>.tar.gz",
+      "contents": "usr/lib/debug split-DWARF .debug (223 entries) for base libs/PAM/bins.",
+      "deps": [
+        "NextBSD-base = <exact same version>"
+      ],
+      "notes": "67 MB, largest removable chunk; excluded from default installs."
+    },
+    {
+      "name": "NextBSD-base-boot",
+      "version_scheme": "EXACT same version string as NextBSD-base.",
+      "source": "nextbsd-freebsd-compat continuous: nextbsd-base-<arch>.tar.gz",
+      "contents": "boot/ loader payloads: loader_lua/loader_4th(.efi), gptzfsboot, zfsloader, isoboot, boot0sio/boot1/pmbr, *.4th, fonts/, images/, menu.rc.",
+      "deps": [
+        "NextBSD-base = <exact same version>"
+      ],
+      "notes": "Consumed by the ISO/disk-image tail (loader_lua.efi -> BOOTX64.EFI). Keep separate so the assembler can pull just the loader without the rest of base if needed."
+    },
+    {
+      "name": "NextBSD-kernel",
+      "version_scheme": "15.1.0.g<YYYYMMDDHHMMSS> where the timestamp is the RELEASE/banner stamp parsed from the kernel binary (`nextbsd-version -k` or `strings kernel | grep 'NextBSD Kernel Version'`), e.g. 15.1.0.g20260622114143. Keep 15.1 prefix so it sorts under the KBI-compatible FreeBSD base ABI. Do NOT use the `version` file (build counter '1').",
+      "source": "nextbsd-kernel continuous: nextbsd-kernel-<arch>.tar.gz (a /usr/obj BUILD tree)",
+      "contents": "ONLY the stripped `kernel` binary (~29 MB) plucked from ./usr/src/<arch>.<arch>/sys/NEXTBSD/kernel, installed to /boot/kernel/kernel mode 555. NO .ko (NO_MODULES=yes). Do NOT package the 4726-entry obj tree.",
+      "deps": [],
+      "notes": "Pre/post-install scripts: rotate existing /boot/kernel/kernel -> /boot/kernel.old/kernel before install (bad continuous build must not brick boot); flag reboot-required. Because uname -r is a per-build timestamp every continuous build is a new version -> reboot prompt every upgrade; mitigate by only bumping pkg version when the binary hash actually changes (compute sha256 of kernel, embed in version metadata, skip republish if unchanged). Continuous artifact is NOT boot-tested (smoke test is PR-only)."
+    },
+    {
+      "name": "NextBSD-kernel-dbg",
+      "version_scheme": "EXACT same version string as NextBSD-kernel.",
+      "source": "nextbsd-kernel continuous: nextbsd-kernel-<arch>.tar.gz",
+      "contents": "kernel.debug (and/or kernel.full) installed to /usr/lib/debug/boot/kernel/kernel.debug. ~110-135 MB.",
+      "deps": [
+        "NextBSD-kernel = <exact same version>"
+      ],
+      "notes": "Symbols are useless unless the timestamp matches the running kernel -> exact '=' dep on NextBSD-kernel."
+    },
+    {
+      "name": "NextBSD-kmod-intelethernet",
+      "version_scheme": "Stamp with the kernel-modules continuous provenance but DEPEND-pin to kernel: pkg version = <kernel version> (so the kext set sorts/upgrades in lockstep with the kernel it is KBI-paired with).",
+      "source": "nextbsd-kernel-modules continuous: intelethernet-kext.tar.gz",
+      "contents": "IntelEthernet.kext (if_em/Intel GbE) -> /System/Library/Extensions. No firmware. ~0.5 MB.",
+      "deps": [
+        "NextBSD-kernel = <exact kernel version>"
+      ],
+      "notes": "Info.plist version is a static '1.0' placeholder — DO NOT derive version from the bundle. CRITICAL: chown 0:0 and chmod go-w (root:wheel, no group/other write) in the plist or OSKext refuses to load at kextload time. CFBundleIdentifier namespace org.nextbsd.kext.* (distinct from LaunchDaemon naming doctrine)."
+    },
+    {
+      "name": "NextBSD-kmod-intelwifi",
+      "version_scheme": "= <kernel version> (KBI-paired).",
+      "source": "nextbsd-kernel-modules continuous: intelwifi-kext.tar.gz",
+      "contents": "IntelWiFi.kext binary (~1.6 MB) ONLY -> /System/Library/Extensions.",
+      "deps": [
+        "NextBSD-kernel = <exact kernel version>",
+        "NextBSD-fw-iwlwifi"
+      ],
+      "notes": "Firmware split into NextBSD-fw-iwlwifi (267 MB) so a kernel/driver bump doesn't re-ship firmware. chown 0:0/go-w required."
+    },
+    {
+      "name": "NextBSD-fw-iwlwifi",
+      "version_scheme": "Independent: fw.<modules-short-sha or firmware-set-hash> — NOT pinned to kernel, so unchanged firmware isn't re-shipped on kernel bumps.",
+      "source": "nextbsd-kernel-modules continuous: intelwifi-kext.tar.gz (Contents/Resources/firmware)",
+      "contents": "189 iwlwifi *.ucode/*.pnvm + LICENCE.iwlwifi_firmware -> IntelWiFi.kext/Contents/Resources/firmware. 267 MB.",
+      "deps": [],
+      "notes": "Installed into the IntelWiFi.kext bundle path; ensure go-w stripped so the whole bundle still authenticates. Depended on by NextBSD-kmod-intelwifi (no version pin so firmware floats)."
+    },
+    {
+      "name": "NextBSD-kmod-graphics-drmcore",
+      "version_scheme": "= <kernel version> (KBI-paired).",
+      "source": "nextbsd-kernel-modules continuous: graphics-kexts.tar.gz (demux)",
+      "contents": "IOGraphics.kext + DMABuf.kext + TTM.kext (drm core, no firmware, ~1.1 MB) -> /System/Library/Extensions.",
+      "deps": [
+        "NextBSD-kernel = <exact kernel version>"
+      ],
+      "notes": "graphics-kexts.tar.gz is a MULTI-bundle tar with leading './' prefix (unlike intel*-kext which have no './') — packaging must demux the 6 bundles. chown 0:0/go-w."
+    },
+    {
+      "name": "NextBSD-kmod-graphics-intel",
+      "version_scheme": "= <kernel version> (KBI-paired).",
+      "source": "nextbsd-kernel-modules continuous: graphics-kexts.tar.gz (demux)",
+      "contents": "IntelGraphics.kext (i915) binary -> /System/Library/Extensions.",
+      "deps": [
+        "NextBSD-kernel = <exact kernel version>",
+        "NextBSD-kmod-graphics-drmcore = <exact kernel version>",
+        "NextBSD-fw-i915"
+      ],
+      "notes": "Vendor kext depends on drmcore trio + its firmware split."
+    },
+    {
+      "name": "NextBSD-fw-i915",
+      "version_scheme": "Independent: fw.<set-hash>.",
+      "source": "nextbsd-kernel-modules continuous: graphics-kexts.tar.gz",
+      "contents": "i915 firmware (27 MB) -> IntelGraphics.kext/Contents/Resources/firmware.",
+      "deps": [],
+      "notes": "Split so a kernel bump doesn't re-ship 27 MB."
+    },
+    {
+      "name": "NextBSD-kmod-graphics-amd",
+      "version_scheme": "= <kernel version> (KBI-paired).",
+      "source": "nextbsd-kernel-modules continuous: graphics-kexts.tar.gz (demux)",
+      "contents": "AMDGraphics.kext (amdgpu) binary -> /System/Library/Extensions.",
+      "deps": [
+        "NextBSD-kernel = <exact kernel version>",
+        "NextBSD-kmod-graphics-drmcore = <exact kernel version>",
+        "NextBSD-fw-amdgpu"
+      ],
+      "notes": "Largest driver; firmware split to NextBSD-fw-amdgpu (110 MB)."
+    },
+    {
+      "name": "NextBSD-fw-amdgpu",
+      "version_scheme": "Independent: fw.<set-hash>.",
+      "source": "nextbsd-kernel-modules continuous: graphics-kexts.tar.gz",
+      "contents": "amdgpu firmware (110 MB) -> AMDGraphics.kext/Contents/Resources/firmware.",
+      "deps": [],
+      "notes": "Biggest single firmware blob; independent versioning avoids re-shipping on every continuous kernel build."
+    },
+    {
+      "name": "NextBSD-kmod-graphics-radeon",
+      "version_scheme": "= <kernel version> (KBI-paired).",
+      "source": "nextbsd-kernel-modules continuous: graphics-kexts.tar.gz (demux)",
+      "contents": "RadeonGraphics.kext (legacy radeon) binary -> /System/Library/Extensions.",
+      "deps": [
+        "NextBSD-kernel = <exact kernel version>",
+        "NextBSD-kmod-graphics-drmcore = <exact kernel version>",
+        "NextBSD-fw-radeon"
+      ],
+      "notes": ""
+    },
+    {
+      "name": "NextBSD-fw-radeon",
+      "version_scheme": "Independent: fw.<set-hash>.",
+      "source": "nextbsd-kernel-modules continuous: graphics-kexts.tar.gz",
+      "contents": "radeon firmware (5.7 MB) -> RadeonGraphics.kext/Contents/Resources/firmware.",
+      "deps": [],
+      "notes": ""
+    },
+    {
+      "name": "NextBSD-darwin-runtime",
+      "version_scheme": "0.0.0.<snapshotdate>+g<userland-short-sha>, e.g. 0.0.0.20260621-141500+g<sha>. Userland tar has NO embedded version; derive from nextbsd-userland main HEAD short SHA (the dispatch client_payload / `gh release view continuous --repo nextbsd-redux/nextbsd-userland --json targetCommitish`).",
+      "source": "nextbsd-userland continuous: nextbsd-userland-<arch>.tar.gz",
+      "contents": "/usr/lib/system/* runtime .so/.so.N (libCoreFoundation, libdispatch, libxpc, liblaunch, libnotify, libsystem_*, libIOKit, libSystemConfiguration, libicucore, lib_FoundationICU), /sbin/launchd, /bin/launchctl (REAL Apple top-level paths, NOT /usr/sbin), /usr/sbin daemons (configd, notifyd, syslogd, aslmanager, mDNSResponder, diskarbitrationd, hostnamed, ipconfigd, ipconfig, ioreg, bootstrap_server, kext{load,unload,stat,deps}), /usr/libexec (kextd, migcom), /usr/bin (mig, syslog). EXCLUDES .a, headers, debug, tests.",
+      "deps": [
+        "NextBSD-kernel >= <kernel floor version>"
+      ],
+      "notes": "Pins a COMPATIBLE kernel FLOOR (>=), not exact (Mach/launchd ABI is stable within a KBI window) — distinct from kexts which pin '='. Tar is './'-prefixed rooted at /; METALOG stripped so NO setuid metadata in tar — pkg builder OWNS file modes (no setuid bits in Tier 0-2 today). NO /System/Library/Frameworks, NO LaunchDaemons, NO .plist in artifact — launchd wiring comes from nextbsd overlays, not this pkg. Do NOT relocate /usr/lib/system .so."
+    },
+    {
+      "name": "NextBSD-darwin-dev",
+      "version_scheme": "EXACT same version as NextBSD-darwin-runtime.",
+      "source": "nextbsd-userland continuous: nextbsd-userland-<arch>.tar.gz",
+      "contents": "/usr/include/* (CoreFoundation, IOKit, SystemConfiguration, dispatch, mach, os, xpc, ...), static /usr/lib/system/*.a (9), /usr/share/man/man3.",
+      "deps": [
+        "NextBSD-darwin-runtime = <exact same version>"
+      ],
+      "notes": "Link-time/dev; excluded from end-user ISO."
+    },
+    {
+      "name": "NextBSD-darwin-runtime-dbg",
+      "version_scheme": "EXACT same version as NextBSD-darwin-runtime.",
+      "source": "nextbsd-userland continuous: nextbsd-userland-<arch>.tar.gz",
+      "contents": "/usr/lib/debug/* .debug companions for sbin/libexec binaries (~9 MB).",
+      "deps": [
+        "NextBSD-darwin-runtime = <exact same version>"
+      ],
+      "notes": "Excluded from default installs."
+    },
+    {
+      "name": "NextBSD-tests",
+      "version_scheme": "EXACT same version as NextBSD-darwin-runtime.",
+      "source": "nextbsd-userland continuous: nextbsd-userland-<arch>.tar.gz",
+      "contents": "/usr/tests/freebsd-launchd-mach/* (49 Mach/launchd/configd test binaries).",
+      "deps": [
+        "NextBSD-darwin-runtime = <exact same version>"
+      ],
+      "notes": "Separate so end-user ISO excludes it."
+    },
+    {
+      "name": "NextBSD-world (meta)",
+      "version_scheme": "= <snapshot version> = <snapshotdate>+g<aggregate>, the coherent-snapshot stamp computed once per nextbsd-pkg run from date + the four source SHAs.",
+      "source": "synthesized in nextbsd-pkg (no upstream artifact)",
+      "contents": "Empty meta-package. Pulls the curated end-user runtime world: NextBSD-base, NextBSD-base-boot, NextBSD-darwin-runtime, NextBSD-kernel, and the amd64 kext set (intelethernet, intelwifi, graphics-drmcore + vendor kexts + firmware).",
+      "deps": [
+        "NextBSD-base",
+        "NextBSD-base-boot",
+        "NextBSD-darwin-runtime",
+        "NextBSD-kernel",
+        "NextBSD-kmod-intelethernet",
+        "NextBSD-kmod-intelwifi",
+        "NextBSD-kmod-graphics-drmcore",
+        "NextBSD-kmod-graphics-intel",
+        "NextBSD-kmod-graphics-amd",
+        "NextBSD-kmod-graphics-radeon"
+      ],
+      "notes": "This is what the nextbsd assembler `pkg install`s. Replaces the src/ compile loop. Mark its deps locked against autoremove (mirrors the existing FreeBSD-pam* `pkg set -A 0` pin). Does NOT pull -dev/-dbg/-tests. arm64 variant omits kexts until the arm64 kext path lands."
+    }
+  ],
+  "pkg_workflow": "WHERE pkg runs: DECISIVE — a FreeBSD VM via vmactions/freebsd-vm@v1 (release: 15.1, usesh:true, sync:rsync, copyback:true), NOT the Linux toolchain container. The nextbsd-kernel-toolchain image is FROM ubuntu:24.04 and has NO pkg(8)/pkg-static at all (confirmed: zero `pkg create`/`pkg repo` in any repo). All four artifacts are already-built ELF tarballs, so nextbsd-pkg does NO compilation — it only repackages. pkg create / pkg repo must run on FreeBSD; vmactions matches what every other repo in the org already does. (poudriere is overkill: there are no port builds, just `pkg create -M manifest` over pre-extracted file trees.)\n\nTRIGGERS (.github/workflows/build.yml, on:):\n  - repository_dispatch: types: [userland-updated]   # the ONLY auto trigger\n  - workflow_dispatch: {}                              # manual escape hatch for kernel/kext-only repackage\nNOT triggered by kernel-updated / kernel-updated / base-updated. (nextbsd-userland's publish job is the single producer that fans out to BOTH nextbsd and nextbsd-pkg.)\n\nJOBS: one `package` job, matrix.arch in [amd64, arm64] (arm64 stub allowed-to-fail / kexts omitted until arm64 kext path exists). Concurrency group per arch so overlapping dispatches coalesce.\n\nORDERED STEPS (inside the FreeBSD VM, per arch):\n 1. Checkout nextbsd-pkg (manifests, build scripts, signing pubkey path, pkglists).\n 2. `pkg install -y gh` (or curl the gh release API) + ensure pkg-static present (base FreeBSD VM has pkg).\n 3. Download the FOUR latest continuous artifacts for this arch (host step, before/around VM):\n      - nextbsd-freebsd-compat: nextbsd-base-<arch>.tar.gz\n      - nextbsd-kernel: nextbsd-kernel-<arch>.tar.gz\n      - nextbsd-kernel-modules: intelethernet-kext.tar.gz, intelwifi-kext.tar.gz, graphics-kexts.tar.gz (amd64 only today)\n      - nextbsd-userland: nextbsd-userland-<arch>.tar.gz\n    via `gh release download continuous --repo nextbsd-redux/<repo> -p '<asset>'`. Also capture each release's targetCommitish + publishedAt for versioning.\n 4. Compute the coherent SNAPSHOT version: SNAP=$(date -u +%Y%m%d-%H%M%S); per-component versions per the schemes above (base reads __FreeBSD_version from extracted param.h; kernel parses banner via `strings`/nextbsd-version -k; userland/kmods from SHAs).\n 5. Stage each package into its own stagedir:\n      - Extract tarballs, STRIP leading './'.\n      - base: split into NextBSD-base / -dev / -dbg / -boot stagedirs by path filter; re-apply setuid (su/login 4555).\n      - kernel: pluck ONLY .../sys/NEXTBSD/kernel into /boot/kernel/kernel (555); kernel.debug into -dbg stagedir.\n      - kexts: demux graphics-kexts.tar.gz into 6 bundles; split firmware into NextBSD-fw-* stagedirs; chown -R 0:0 and chmod -R go-w EVERY .kext (OSKext auth).\n      - darwin: split /usr/lib/system runtime vs .a(dev) vs headers(dev) vs /usr/lib/debug(dbg) vs /usr/tests(tests).\n 6. For each package write a +MANIFEST (name, version, abi=nextbsd:15:<arch>, deps, scripts for kernel rotate/reboot-flag) and run `pkg create -M +MANIFEST -r <stagedir> -o <outdir>/All/`.\n 7. `pkg repo <outdir>/ <signing-key>` to generate the catalog (meta.conf, packagesite.pkg, data.pkg, digests). Sign with the repo private key from a secret (RSA or the new ed25519/fingerprint scheme).\n 8. FLATTEN for release assets: the catalog dir has subpaths (All/*.pkg). Since release asset names cannot contain '/', flatten: rename each catalog file to a flat name encoding its path (e.g. All__NextBSD-base-<ver>.pkg) OR — simpler and what the repo.conf must match — ship the catalog files (meta.conf, packagesite.pkg, data.pkg) at top level and ship every package as a flat asset, then ship a repo.conf whose `url:` points at the per-arch release's asset base URL using pkg's `pkg+https` with a layout that pkg can resolve. Generate the per-arch NextBSD.conf with the arch baked into the URL (no ${ABI}).\n 9. Publish to the per-arch tag: `gh release upload continuous-amd64` (or continuous-arm64) `--clobber` for every flattened catalog + package asset + the NextBSD.conf + the signing fingerprint. Create the release (prerelease:true) if missing. PRs never publish (guard the publish step with `if: github.event_name != 'pull_request'`).\n10. VERIFY (still in VM or a follow-up job): write the generated NextBSD.conf into /usr/local/etc/pkg/repos/, install the fingerprint, then `pkg -o ABI=nextbsd:15:amd64 -o IGNORE_OSVERSION=yes update -f` and `pkg search NextBSD-` / `pkg install -y -n NextBSD-world` (dry-run) to confirm the published flat repo resolves and the dep graph (kext '=' pins to kernel) is satisfiable.",
+  "userland_dispatch": "In nextbsd-userland/.github/workflows/build.yml, the existing publish-job step \"Trigger downstream nextbsd ISO build\" (gated `if: github.event_name == 'repository_dispatch'`, env GH_TOKEN: secrets.DISPATCH_TOKEN) gets a SECOND gh api call appended to the same run block so both fire on a real upstream change:\n\n      - name: Trigger downstream nextbsd ISO build\n        if: github.event_name == 'repository_dispatch'\n        env:\n          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}\n        run: |\n          gh api repos/nextbsd-redux/nextbsd/dispatches \\\n            -f event_type=userland-updated \\\n            -f \"client_payload[fbsd_sha]=${{ github.event.client_payload.fbsd_sha }}\"\n          gh api repos/nextbsd-redux/nextbsd-pkg/dispatches \\\n            -f event_type=userland-updated \\\n            -f \"client_payload[fbsd_sha]=${{ github.event.client_payload.fbsd_sha }}\"\n\nSame event_type (userland-updated), same DISPATCH_TOKEN, same `if` gate. nextbsd-pkg/build.yml must add the matching `on.repository_dispatch.types: [userland-updated]` to consume it. Optionally also forward the userland HEAD SHA: add `-f \"client_payload[userland_sha]=${{ github.sha }}\"` to the nextbsd-pkg call so the pkg builder can stamp the darwin-runtime version without a second API round-trip.",
+  "nextbsd_refactor": "Goal: turn build.sh from a 3266-line in-chroot COMPILER into a pkg-in-VM MERGE ASSEMBLER. Keep the media tail (step 6 disk image + step 7 live ISO) BYTE-FOR-BYTE; replace only the rootfs-assembly head.\n\nA. Trigger/consume unchanged: nextbsd still triggers on base-updated (from compat+userland). After nextbsd-pkg exists, the natural producer is nextbsd-pkg's publish, but per constraints nextbsd-pkg is fed by userland-updated; nextbsd keeps consuming the continuous releases. (Open question: should nextbsd switch to trigger on a nextbsd-pkg `pkg-updated` dispatch so it always installs a coherent published snapshot rather than racing the four raw artifacts.)\n\nB. Consumer rootfs head (replaces phase 2-3 compile loop + buildpkgs.txt src/ builds):\n  1. Lay down a MINIMAL bootstrap base — either tar-extract a tiny seed or `pkg install` NextBSD-base from the new repo into an empty rootfs.\n  2. Write /usr/local/etc/pkg/repos/NextBSD.conf pointing at the per-arch nextbsd-pkg release URL (continuous-<arch>) with the signing fingerprint; keep the existing FreeBSD ports repo ONLY for the build-tool set (or drop it entirely if Gershwin-in-place compiling moves out).\n  3. Host-driven install (no foreign exec on native amd64): `pkg -r $WORK/rootfs -o ABI=nextbsd:15:amd64 -o IGNORE_OSVERSION=yes install -y NextBSD-world`. This pulls base + darwin runtime + kernel + kexts as a coherent dep-resolved set, replacing the src/ cmake/ninja loop and the kernel/kext artifact hand-drops.\n  4. Bake /bin/nextbsd-version + /etc/os-release from $IMG_DATE AND record the resolved NextBSD-world pkg version (reproducibility).\n  5. Re-apply the existing minimal /etc + /var bootstrap (Apple /private layout, master.passwd/group + pwd_mkdb, certs, nsswitch) from overlays/ — unchanged.\n\nC. Media tail PRESERVED VERBATIM: step 6 (chown 0:0, ELF NEEDED libscan, makefs ffs ROOTFS + msdos ESP w/ loader_lua.efi -> BOOTX64.EFI, mkimg gpt, zip) and step 7 (makefs NBROOT, mkuzip rootfs.uzip, hand-curated mfsroot tool/lib BFS closure + /init vfs.pivot, mkisoimages.sh -b NEXTBSD). The seam is \"everything before makefs\" — only that head is rewritten.\n\nD. pkg primitive: host-driven `pkg -r rootfs install` (NOT chroot) for the install itself — only post-install scripts exec target binaries. On amd64 native that's fine. arm64 needs qemu-user + binmiscctl/imgact_binmisc registration so post-install scripts (pwd_mkdb, certctl rehash, kldxref) run under transparent emulation; OR run the whole assembler in an aarch64 runner/qemu-system-aarch64. makefs/mkuzip/mkimg are arch-agnostic. arm64 matrix stays commented until a runner/emulation path lands (and until arm64 kexts exist).\n\nE. Risks to re-verify after the switch: (1) the mfsroot curated tool/lib closure + VM-base fallback (e.g. libkiconv.so.4) must be re-checked against the pkg-set rootfs's lib layout. (2) no-clobber-apple-libs: the curated NextBSD-world pkglist + install ORDER must ensure base does not clobber Apple-adjacent libs (install base first, darwin runtime last). (3) decide whether the shipped image still needs llvm19/cmake/ninja (Gershwin-in-place) or can drop GBs now that compiling moved to nextbsd-pkg. (4) libicu OOM constraint LEAVES the assembler (build moves to nextbsd-pkg CI) — assembler VM mem:8192/cpu:4 no longer bound by it, but the pkg producer CI inherits the 6-10 GB icu_packaged_data.cpp peak.",
+  "open_questions": [
+    "Is usr/bin/passwd intentionally non-setuid (0555) in NextBSD (Apple/launchd auth model) or is it a raw-tar repack drop? Determines whether the base pkg plist forces 4555 or ships 0555. Need maintainer confirmation before re-applying special bits.",
+    "Flat-repo layout vs pkg's expected catalog hierarchy: pkg repos normally serve meta.conf + packagesite.pkg + data.pkg + All/*.pkg over HTTP with a directory structure. Release assets are flat. Does the chosen flattening (encode '/' as '__' in asset names + a repo.conf url that resolves them) actually satisfy pkg's fetcher, or do we need pkg's `pkg+https` mirror layout / a redirect indirection? Must prototype `pkg update` against a real continuous-amd64 release before committing.",
+    "Kernel reboot-prompt churn: every continuous build is a new uname -r timestamp -> new pkg version -> reboot flag on every upgrade. Confirm the 'only bump version when binary sha changes' mitigation is acceptable, or whether reboot prompts on every snapshot are fine for a rolling prerelease channel.",
+    "Should nextbsd (ISO) switch its trigger to a new `pkg-updated` dispatch from nextbsd-pkg so it installs ONE coherent published snapshot, instead of continuing to consume the four raw continuous artifacts (which can race)? Out of scope this pass but affects the refactor's coherence guarantee.",
+    "ABI string collision: packages are stamped nextbsd:15:amd64 but the booted image's pkg auto-detects FreeBSD:15:amd64 (ELF brand unchanged). Confirm pkg will install nextbsd:15:* packages onto a FreeBSD:15:* host with ABI= override + IGNORE_OSVERSION=yes, and that the two repos (NextBSD world + FreeBSD ports build-tools) coexist without ALTABI conflicts.",
+    "Signing scheme: RSA repo key (classic pkg) vs the newer fingerprint/ed25519 — which key does the org want, where is the private key stored (DISPATCH_TOKEN is a PAT, not a signing key; need a new SIGNING_KEY secret), and is the public fingerprint shipped in the overlay or in the base pkg?",
+    "arm64: kexts are amd64-only today (build.yml gates kext download on amd64). The arm64 release tag continuous-arm64 will ship base+darwin+kernel but NO kexts and NO NextBSD-world-with-kexts. Confirm a degraded arm64 world meta is acceptable until arm64 kexts exist.",
+    "Firmware split granularity: is independent firmware versioning (NextBSD-fw-* not pinned to kernel) safe given OSKext bundle authentication chowns/chmods the WHOLE .kext — installing firmware via a separate pkg into an already-authenticated bundle must not break go-w/root:wheel. Verify the firmware pkg's own files carry correct perms."
+  ],
+  "execution_steps": [
+    "1. `gh repo create nextbsd-redux/nextbsd-pkg --public` (account pkgdemon has admin:org via DISPATCH_TOKEN). Clone it.",
+    "2. Generate a repo SIGNING key (decide RSA vs ed25519 per open question); store the PRIVATE key as repo/org secret SIGNING_KEY; commit the PUBLIC key/fingerprint under keys/nextbsd.pub in the repo.",
+    "3. Write nextbsd-pkg/.github/workflows/build.yml: on.repository_dispatch.types:[userland-updated] + on.workflow_dispatch; one `package` job, matrix.arch:[amd64](arm64 commented/allow-fail), concurrency per arch, uses vmactions/freebsd-vm@v1 (release:15.1, usesh:true, sync:rsync, copyback:true, mem:8192 cpu:4). Purpose: orchestrate download->stage->pkg create->pkg repo->publish.",
+    "4. Write nextbsd-pkg/scripts/fetch-artifacts.sh: `gh release download continuous` for the four repos' per-arch assets + capture targetCommitish/publishedAt into a versions env file. Purpose: pull the coherent snapshot inputs.",
+    "5. Write nextbsd-pkg/scripts/stage.sh: extract+strip './', split base into base/-dev/-dbg/-boot, pluck kernel binary + kernel.debug, demux graphics-kexts.tar.gz into 6 bundles, split firmware to fw-*, split darwin into runtime/dev/dbg/tests, re-apply setuid (su/login 4555), chown -R 0:0 + chmod -R go-w every .kext. Purpose: build per-package stagedirs.",
+    "6. Write nextbsd-pkg/manifests/<pkg>.ucl templates (name/version/abi=nextbsd:15:${ARCH}/deps/scripts) — including kernel pre-install rotate-to-/boot/kernel.old + reboot-required message, exact '=' kernel deps on every kmod, '>=' kernel floor on darwin-runtime, version-lock on -dev/-dbg, and the NextBSD-world meta. Purpose: per-package metadata + lifecycle scripts.",
+    "7. Write nextbsd-pkg/scripts/build-repo.sh: loop `pkg create -M <manifest> -r <stagedir> -o out/All/`, then `pkg repo out/ <SIGNING_KEY>`, then flatten catalog+packages into release-asset-safe names and generate the per-arch NextBSD.conf (arch baked into url, fingerprint inline). Purpose: produce the signed flat repo + repo.conf.",
+    "8. Write nextbsd-pkg/scripts/publish.sh: `gh release create continuous-${ARCH} --prerelease` if missing, then `gh release upload continuous-${ARCH} --clobber` all flattened assets + NextBSD.conf + fingerprint. Guard with `if [ pull_request ]` skip. Purpose: publish to the two per-arch tags.",
+    "9. Add a verify step/job: install NextBSD.conf + fingerprint into a fresh FreeBSD VM, `pkg -o ABI=nextbsd:15:amd64 -o IGNORE_OSVERSION=yes update -f`, `pkg search NextBSD-`, `pkg install -n NextBSD-world` (dry-run) — fail the build if the catalog or dep graph doesn't resolve.",
+    "10. Commit + push nextbsd-pkg on a branch; open PR; confirm PR run STAGES+CREATES packages but does NOT publish (PR-never-publishes). Merge when green.",
+    "11. Edit nextbsd-userland/.github/workflows/build.yml: append the second `gh api repos/nextbsd-redux/nextbsd-pkg/dispatches -f event_type=userland-updated -f client_payload[fbsd_sha]=...` to the existing 'Trigger downstream nextbsd ISO build' step (see userland_dispatch). Open PR there, merge.",
+    "12. TRIGGER manually first via workflow_dispatch on nextbsd-pkg (escape hatch) to validate end-to-end without waiting for a userland build; then validate the auto path by re-running a nextbsd-userland publish (or `gh api repos/nextbsd-redux/nextbsd-userland/dispatches -f event_type=base-updated ...`) and confirm nextbsd-pkg fires.",
+    "13. VERIFY the published repo from a clean FreeBSD VM/host: drop the continuous-amd64 NextBSD.conf into /usr/local/etc/pkg/repos/, install the fingerprint into /usr/share/keys/pkg/trusted/, then `pkg update -f && pkg rquery '%n %v %A' NextBSD-\\*` and `pkg install -y NextBSD-world` into a `-r` rootfs; assert kext '=' pins resolve to the matching kernel version and .kext perms are root:wheel/go-w.",
+    "14. (Later pass, separate) Refactor nextbsd/build.sh head to pkg-install NextBSD-world per nextbsd_refactor; keep step 6/7 media tail untouched; re-verify mfsroot lib closure + no-clobber install order on the pkg-set rootfs."
+  ]
+}
