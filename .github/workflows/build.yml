@@ -1,0 +1,80 @@
+name: NextBSD packages
+
+# Assembles versioned pkg(8) packages from the component repos' `continuous`
+# artifacts and publishes a FLAT pkg repository to per-arch release tags
+# (continuous-amd64 / continuous-arm64). pkg(8) only runs on FreeBSD, so the
+# packaging happens inside a FreeBSD VM (vmactions); the Linux runner just does
+# the cross-repo downloads (public repos -> GITHUB_TOKEN) and the release upload.
+#
+# Trigger model (maintainer decision): nextbsd-userland's publish is the SINGLE
+# auto producer (repository_dispatch: userland-updated). workflow_dispatch is the
+# manual escape hatch to repackage on a kernel/kext-only change. pull_request
+# builds the packages but never publishes.
+#
+# STATUS: spike — validating one package (NextBSD-darwin-runtime), UNSIGNED, amd64,
+# to prove pkg can read a flat repo served from GitHub Release assets. The full
+# 16-package split + signing + arm64 follow once the mechanism is proven.
+
+on:
+  repository_dispatch:
+    types: [userland-updated]
+  workflow_dispatch:
+  pull_request:
+    paths: ['scripts/**', 'manifests/**', '.github/workflows/build.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: package (amd64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download component artifacts (amd64, public repos)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p art
+          gh release download continuous -R nextbsd-redux/nextbsd-userland \
+            --pattern 'nextbsd-userland-amd64.tar.gz' --dir art --clobber
+          ls -lh art/
+
+      - name: Build packages + flat repo (FreeBSD VM)
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14.2"
+          usesh: true
+          copyback: true
+          prepare: pkg bootstrap -y || true
+          run: |
+            sh scripts/build-spike.sh
+
+      - name: Publish flat repo to continuous-amd64
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view continuous-amd64 -R nextbsd-redux/nextbsd-pkg >/dev/null 2>&1 \
+            || gh release create continuous-amd64 -R nextbsd-redux/nextbsd-pkg \
+                 --prerelease --title "NextBSD packages — amd64 (rolling)" \
+                 --notes "Flat pkg(8) repository (spike, unsigned). Configure pkg with the bundled NextBSD-amd64.conf asset."
+          gh release upload continuous-amd64 -R nextbsd-redux/nextbsd-pkg out/repo/* --clobber
+          echo "Published:"; ls -lh out/repo/
+
+  verify:
+    name: verify (pkg reads the published flat repo)
+    needs: package
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: pkg update + rquery against continuous-amd64 (FreeBSD VM)
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14.2"
+          usesh: true
+          prepare: pkg bootstrap -y || true
+          run: |
+            sh scripts/verify-spike.sh
