@@ -37,6 +37,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p art
+          gh release download continuous -R nextbsd-redux/nextbsd-freebsd-compat \
+            --pattern 'nextbsd-base-amd64.tar.gz' --dir art --clobber
+          gh release download continuous -R nextbsd-redux/nextbsd-kernel \
+            --pattern 'nextbsd-kernel-amd64.tar.gz' --dir art --clobber
+          gh release download continuous -R nextbsd-redux/nextbsd-kernel-modules \
+            --pattern '*kext*.tar.gz' --dir art --clobber || true
           gh release download continuous -R nextbsd-redux/nextbsd-userland \
             --pattern 'nextbsd-userland-amd64.tar.gz' --dir art --clobber
           ls -lh art/
@@ -49,7 +55,7 @@ jobs:
           copyback: true
           prepare: pkg bootstrap -y || true
           run: |
-            sh scripts/build-spike.sh
+            sh scripts/build.sh
 
       - name: Publish flat repo to continuous-amd64
         if: github.event_name != 'pull_request'
@@ -77,4 +83,4 @@ jobs:
           usesh: true
           prepare: pkg bootstrap -y || true
           run: |
-            sh scripts/verify-spike.sh
+            sh scripts/verify.sh
