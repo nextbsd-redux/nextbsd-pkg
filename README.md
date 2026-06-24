@@ -27,16 +27,39 @@ nextbsd-userland ───────┘
 
 ## Consuming the repo
 
+Drop a `NextBSD.conf` matching your architecture into `/usr/local/etc/pkg/repos/`:
+
 ```
-# /usr/local/etc/pkg/repos/NextBSD.conf
+# amd64
 NextBSD: { url: "https://github.com/nextbsd-redux/nextbsd-pkg/releases/download/continuous-amd64", enabled: yes }
 ```
 
+```
+# arm64
+NextBSD: { url: "https://github.com/nextbsd-redux/nextbsd-pkg/releases/download/continuous-arm64", enabled: yes }
+```
+
+Then install the whole OS via the meta-package (and upgrade as CI republishes):
+
+```sh
+pkg update
+pkg install NextBSD-world      # base + kernel + userland (+ kernel-extensions on amd64)
+pkg upgrade                    # rolling: picks up each new snapshot
+```
+
+## Packages
+
+| package | amd64 | arm64 | from |
+|---|:--:|:--:|---|
+| `NextBSD-freebsd-compat` | ✓ | ✓ | nextbsd-freebsd-compat (base: libc, PAM, commands) |
+| `NextBSD-kernel` | ✓ | ✓ | nextbsd-kernel (kernel binary) |
+| `NextBSD-kernel-extensions` | ✓ | — | nextbsd-kernel-modules (kexts; amd64-only today) |
+| `NextBSD-userland` | ✓ | ✓ | nextbsd-userland (Darwin Mach runtime + daemons) |
+| `NextBSD-world` (meta) | ✓ | ✓ | depends on all of the above |
+
 ## Status
 
-**Spike.** Currently validating one package (`NextBSD-darwin-runtime`), unsigned,
-amd64, to prove the flat-repo-on-Releases mechanism end-to-end. The full package
-split (see `docs/PLAN.json`), package signing, and arm64 land once it's proven.
-
-The design (16-package split, dep pins, versioning, the pkg-in-VM ISO assembler
-refactor) is in [`docs/PLAN.json`](docs/PLAN.json).
+**Working** (unsigned). `pkg install NextBSD-world` resolves the full set from the
+flat repo on both arches. Package signing and the pkg-in-VM ISO assembler refactor
+are the remaining pre-production steps; the full design (further splits, dep pins,
+versioning) is in [`docs/PLAN.json`](docs/PLAN.json).
