@@ -14,7 +14,9 @@ set -eux
 pkg --version || pkg bootstrap -y
 
 ARCH="${ARCH:-amd64}"
-ABI="FreeBSD:15:${ARCH}"
+# pkg's ABI uses 'aarch64' for 64-bit ARM, while the artifact files are named 'arm64'.
+case "$ARCH" in arm64) ABIARCH=aarch64 ;; *) ABIARCH="$ARCH" ;; esac
+ABI="FreeBSD:15:${ABIARCH}"
 VER="0.0.0.$(date -u +%Y%m%d%H%M%S)"
 
 rm -rf stage out
