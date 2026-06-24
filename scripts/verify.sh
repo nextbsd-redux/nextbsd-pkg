@@ -10,6 +10,8 @@ set -eux
 pkg --version || pkg bootstrap -y
 
 ARCH="${ARCH:-amd64}"
+# pkg's ABI uses 'aarch64' for 64-bit ARM; the release tag / artifacts use 'arm64'.
+case "$ARCH" in arm64) ABIARCH=aarch64 ;; *) ABIARCH="$ARCH" ;; esac
 BASE="https://github.com/nextbsd-redux/nextbsd-pkg/releases/download/continuous-${ARCH}"
 
 mkdir -p /usr/local/etc/pkg/repos
@@ -22,7 +24,7 @@ NextBSD: {
 }
 CONF
 
-PKG="pkg -o ABI=FreeBSD:15:${ARCH} -o IGNORE_OSVERSION=yes"
+PKG="pkg -o ABI=FreeBSD:15:${ABIARCH} -o IGNORE_OSVERSION=yes"
 
 echo "=== pkg update (fetch catalog from the flat Release repo, ${ARCH}) ==="
 $PKG update -f
