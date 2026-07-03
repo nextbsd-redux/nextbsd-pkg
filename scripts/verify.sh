@@ -1,7 +1,7 @@
 #!/bin/sh
 # verify.sh — runs INSIDE a fresh FreeBSD VM. Points pkg at the just-published
 # flat repo (continuous-${ARCH} Release assets) and confirms the package set is
-# queryable and that NextBSD-world resolves the full dependency graph.
+# queryable and that NextBSD-everything resolves the full dependency graph.
 #
 # The VM is x86 but the resolution is metadata-only (dry-run -n), so it validates
 # arm64 catalogs too (pkg -o ABI=FreeBSD:15:arm64 resolves deps without extracting).
@@ -32,7 +32,7 @@ $PKG update -f
 echo "=== every NextBSD package in the ${ARCH} catalog ==="
 $PKG search -r NextBSD NextBSD
 
-echo "=== dry-run install of the whole OS (NextBSD-world resolves the graph) ==="
-$PKG install -n -y NextBSD-world
+echo "=== dry-run install of the whole OS (NextBSD-everything resolves the graph) ==="
+$PKG install -n -y NextBSD-everything
 
-echo "OK: ${ARCH} flat pkg repo readable; NextBSD-world resolves the dependency graph"
+echo "OK: ${ARCH} flat pkg repo readable; NextBSD-everything resolves the dependency graph"

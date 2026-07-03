@@ -1,7 +1,7 @@
 #!/bin/sh
 # build.sh — runs INSIDE the FreeBSD VM (vmactions). Repackages the component
 # `continuous` artifacts for ${ARCH} into one pkg(8) package each (named after
-# the source repo), plus a NextBSD-world meta, into a FLAT repo (out/repo/).
+# the source repo), plus a NextBSD-everything meta, into a FLAT repo (out/repo/).
 #
 # Arch-aware: amd64 gets all four packages; arm64 gets base + kernel + userland
 # but NOT kernel-extensions (the kexts are amd64-only builds today). The
@@ -84,13 +84,13 @@ mkdir -p stage/userland
 tar -C stage/userland -xzf "art/nextbsd-userland-${ARCH}.tar.gz"
 mkpkg NextBSD-userland stage/userland "NextBSD Darwin/Mach userland (Mach, launchd, libdispatch, CoreFoundation, configd, IOKit + daemons)" "$(dep2 NextBSD-freebsd-compat NextBSD-kernel)"
 
-# --- 5. NextBSD-world (meta: installs the whole OS for this arch) ---
-mkdir -p stage/world
+# --- 5. NextBSD-everything (meta: installs the whole OS for this arch) ---
+mkdir -p stage/everything
 {
-  echo "name: NextBSD-world"
-  echo "origin: nextbsd/NextBSD-world"
+  echo "name: NextBSD-everything"
+  echo "origin: nextbsd/NextBSD-everything"
   echo "version: \"${VER}\""
-  echo "comment: \"NextBSD world meta-package (base + kernel + userland$([ "$HAVE_KEXTS" = 1 ] && echo ' + kernel-extensions'))\""
+  echo "comment: \"NextBSD-everything meta-package (base + kernel + userland$([ "$HAVE_KEXTS" = 1 ] && echo ' + kernel-extensions'))\""
   echo "desc: \"Installs the complete NextBSD ${ARCH} OS snapshot ${VER}.\""
   echo "maintainer: \"dev@nextbsd.org\""
   echo "www: \"https://nextbsd.org\""
@@ -105,7 +105,7 @@ mkdir -p stage/world
   echo "}"
 } > /tmp/+MANIFEST
 : > /tmp/plist
-pkg create -M /tmp/+MANIFEST -p /tmp/plist -r stage/world -o out/repo
+pkg create -M /tmp/+MANIFEST -p /tmp/plist -r stage/everything -o out/repo
 
 # --- catalog the flat repo ---
 echo "=== packages (${ARCH}) ==="; ls -lh out/repo/*.pkg

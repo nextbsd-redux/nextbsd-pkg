@@ -16,7 +16,7 @@ nextbsd-userland ───────┘
         nextbsd-pkg  ──(pkg create / pkg repo, inside a FreeBSD VM)──▶  flat repo
             │
             ▼  GitHub Release assets:  continuous-amd64 / continuous-arm64
-        users:  pkg update && pkg upgrade        ISO builder:  pkg install NextBSD-world
+        users:  pkg update && pkg upgrade        ISO builder:  pkg install NextBSD-everything
 ```
 
 - **pkg runs in a FreeBSD VM** (vmactions) — the Linux runner only downloads the
@@ -43,7 +43,7 @@ Then install the whole OS via the meta-package (and upgrade as CI republishes):
 
 ```sh
 pkg update
-pkg install NextBSD-world      # base + kernel + userland (+ kernel-extensions on amd64)
+pkg install NextBSD-everything      # base + kernel + userland (+ kernel-extensions on amd64)
 pkg upgrade                    # rolling: picks up each new snapshot
 ```
 
@@ -55,11 +55,11 @@ pkg upgrade                    # rolling: picks up each new snapshot
 | `NextBSD-kernel` | ✓ | ✓ | nextbsd-kernel (kernel binary) |
 | `NextBSD-kernel-extensions` | ✓ | — | nextbsd-kernel-modules (kexts; amd64-only today) |
 | `NextBSD-userland` | ✓ | ✓ | nextbsd-userland (Darwin Mach runtime + daemons) |
-| `NextBSD-world` (meta) | ✓ | ✓ | depends on all of the above |
+| `NextBSD-everything` (meta) | ✓ | ✓ | depends on all of the above |
 
 ## Status
 
-**Working** (unsigned). `pkg install NextBSD-world` resolves the full set from the
+**Working** (unsigned). `pkg install NextBSD-everything` resolves the full set from the
 flat repo on both arches. Package signing and the pkg-in-VM ISO assembler refactor
 are the remaining pre-production steps; the full design (further splits, dep pins,
 versioning) is in [`docs/PLAN.json`](docs/PLAN.json).
