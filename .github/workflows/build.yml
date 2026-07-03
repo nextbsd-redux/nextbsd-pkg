@@ -70,12 +70,32 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: continuous-${{ matrix.arch }}
         run: |
-          gh release view "$TAG" -R nextbsd-redux/nextbsd-pkg >/dev/null 2>&1 \
-            || gh release create "$TAG" -R nextbsd-redux/nextbsd-pkg \
+          R=nextbsd-redux/nextbsd-pkg
+          gh release view "$TAG" -R "$R" >/dev/null 2>&1 \
+            || gh release create "$TAG" -R "$R" \
                  --prerelease --title "NextBSD packages — ${{ matrix.arch }} (rolling)" \
                  --notes "Flat pkg(8) repository. Configure pkg with a NextBSD.conf pointing at this tag's download URL."
-          gh release upload "$TAG" -R nextbsd-redux/nextbsd-pkg out/repo/* --clobber
-          echo "Published (${{ matrix.arch }}):"; ls -lh out/repo/
+          # Safe publish order so a concurrent `pkg update` never sees a broken repo,
+          # and so stale timestamp-versioned .pkg files don't accumulate on the release:
+          #   1. upload the packages first
+          #   2. upload the catalog LAST (so it only ever references packages already present)
+          #   3. prune any NextBSD-*.pkg asset that isn't part of this snapshot
+          echo "== 1. upload packages =="
+          gh release upload "$TAG" -R "$R" out/repo/NextBSD-*.pkg --clobber
+          echo "== 2. upload catalog (last) =="
+          gh release upload "$TAG" -R "$R" out/repo/meta* out/repo/packagesite* out/repo/data* --clobber
+          echo "== 3. prune stale package assets =="
+          keep=$(cd out/repo && ls NextBSD-*.pkg)
+          for a in $(gh release view "$TAG" -R "$R" --json assets -q '.assets[].name' | grep -E '^NextBSD-.*\.pkg$'); do
+            if printf '%s\n' "$keep" | grep -qx "$a"; then
+              :
+            else
+              echo "  prune: $a"
+              gh release delete-asset "$TAG" "$a" -R "$R" --yes
+            fi
+          done
+          echo "Published (${{ matrix.arch }}) — release assets now:"
+          gh release view "$TAG" -R "$R" --json assets -q '.assets[].name' | sort
 
   verify:
     name: verify (${{ matrix.arch }})
@@ -88,7 +108,7 @@ jobs:
         arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
-      - name: pkg update + resolve NextBSD-world (FreeBSD VM)
+      - name: pkg update + resolve NextBSD-everything (FreeBSD VM)
         uses: vmactions/freebsd-vm@v1
         with:
           release: "14.2"
