@@ -49,13 +49,11 @@ dep2() { printf 'deps: { %s: { origin: "nextbsd/%s", version: "%s" }, %s: { orig
 # --- 1. NextBSD-freebsd-compat (FreeBSD base: libc/libs, PAM, commands) ---
 mkdir -p stage/compat
 tar -C stage/compat -xzf "art/nextbsd-base-${ARCH}.tar.gz"
-# Drop the files the Darwin userland package also ships, so `pkg install
-# NextBSD-everything` doesn't hit a file conflict (pkg refuses two packages
-# owning the same path). The Apple/Darwin side wins (no-clobber-apple-libs):
-# libdispatch's BlocksRuntime provides the canonical Block.h / Block_private.h.
-# These are the ONLY base<->userland overlap (verified by diffing the tarballs);
-# add any future overlaps here.
-rm -f stage/compat/usr/include/Block.h stage/compat/usr/include/Block_private.h
+# base<->userland collisions are stripped UPSTREAM in nextbsd-freebsd-compat
+# (scripts/strip-collisions.sh — self-policing: it fails the base build on any
+# base<->userland overlap not in its allowlist), so the base tarball arrives
+# already clean. No dedup needed here anymore (the old `rm -f Block.h
+# Block_private.h` became a no-op once the base build owns collision policy).
 mkpkg NextBSD-freebsd-compat stage/compat "NextBSD FreeBSD-compatible base (libc, libs, PAM, login, command suites)" ""
 
 # --- 2. NextBSD-kernel (just the stripped kernel binary from the obj tree) ---
