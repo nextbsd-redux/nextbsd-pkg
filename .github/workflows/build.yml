@@ -57,7 +57,13 @@ jobs:
       - name: Build packages + flat repo, then install-test (FreeBSD VM)
         uses: vmactions/freebsd-vm@v1
         with:
-          release: "14.2"
+          # FreeBSD 15.1 so the VM's native pkg ABI is FreeBSD:15 — matching the
+          # packages, which lets install-test.sh's `pkg -r ... update/install`
+          # accept the repo (a 14.x VM rejects FreeBSD:15 packages as "wrong
+          # architecture" even with ABI pinned). This is the same release the ISO
+          # builders (nextbsd/build.sh, gershwin-on-nextbsd) use. pkg create/repo
+          # in build.sh are version-agnostic, so packaging is unaffected.
+          release: "15.1"
           usesh: true
           copyback: true
           prepare: pkg bootstrap -y || true
