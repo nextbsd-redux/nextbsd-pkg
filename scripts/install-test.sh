@@ -28,11 +28,20 @@ cat > "$REPOS/nextbsd.conf" <<CONF
 nextbsd: { url: "file://$REPO", enabled: yes, signature_type: none }
 CONF
 
-# Cross-arch extraction on this x86 VM: arm64 packages are FreeBSD:15:aarch64 and
-# only get untarred (never executed), so the same pkg -r works. pkg requires
-# OSVERSION when ABI is pinned; IGNORE_OSVERSION reconciles the VM's own version.
+# The VM is FreeBSD 14 but the packages are FreeBSD:15; pin the ABI so pkg
+# accepts the repo. Set it via the ENVIRONMENT (ABI/OSVERSION/IGNORE_OSVERSION),
+# NOT `-o ABI=`: with `-r <root>` pkg derives its ABI from the (empty) root and
+# the -o override doesn't win the repo arch-check, so `pkg update` rejects the
+# FreeBSD:15 repo as "wrong architecture". Env vars override globally — this is
+# exactly what the ISO builders (nextbsd/build.sh, gershwin-on-nextbsd) do. pkg
+# requires OSVERSION when ABI is pinned; IGNORE_OSVERSION reconciles the VM's.
+# Cross-arch is fine: arm64 packages (FreeBSD:15:aarch64) are only untarred here,
+# never executed.
 export ASSUME_ALWAYS_YES=yes
-PKG="pkg -r $ROOT -o REPOS_DIR=$REPOS -o ABI=FreeBSD:15:${ABIARCH} -o IGNORE_OSVERSION=yes -o OSVERSION=$(uname -K)"
+export ABI="FreeBSD:15:${ABIARCH}"
+export IGNORE_OSVERSION=yes
+export OSVERSION="$(uname -K)"
+PKG="pkg -r $ROOT -o REPOS_DIR=$REPOS"
 
 echo "=== install NextBSD-everything into a scratch root (${ARCH}, real extraction) ==="
 $PKG update -f
