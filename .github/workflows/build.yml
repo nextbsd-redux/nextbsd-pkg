@@ -54,7 +54,7 @@ jobs:
           fi
           ls -lh art/
 
-      - name: Build packages + flat repo (FreeBSD VM)
+      - name: Build packages + flat repo, then install-test (FreeBSD VM)
         uses: vmactions/freebsd-vm@v1
         with:
           release: "14.2"
@@ -62,7 +62,14 @@ jobs:
           copyback: true
           prepare: pkg bootstrap -y || true
           run: |
+            set -e
+            # build.sh assembles the flat repo and runs Layer A (check-ownership.sh)
+            # before cataloging. install-test.sh is Layer B: it really installs
+            # NextBSD-everything into a scratch root here, BEFORE the publish step
+            # below, so a repo that can't install itself fails CI instead of
+            # shipping (nextbsd#370). Both run on PRs too (publish does not).
             ARCH=${{ matrix.arch }} sh scripts/build.sh
+            ARCH=${{ matrix.arch }} sh scripts/install-test.sh
 
       - name: Publish flat repo to continuous-${{ matrix.arch }}
         if: github.event_name != 'pull_request'

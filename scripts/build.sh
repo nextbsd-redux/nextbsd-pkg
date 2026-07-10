@@ -112,6 +112,10 @@ mkdir -p stage/everything
 : > /tmp/plist
 pkg create -M /tmp/+MANIFEST -p /tmp/plist -r stage/everything -o out/repo
 
+# --- Layer A (nextbsd#370): fail if any two component packages co-own a path,
+#     BEFORE cataloging/publishing. Fast + deterministic; names the culprit. ---
+sh scripts/check-ownership.sh
+
 # --- catalog the flat repo ---
 echo "=== packages (${ARCH}) ==="; ls -lh out/repo/*.pkg
 pkg repo out/repo
