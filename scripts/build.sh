@@ -70,7 +70,7 @@ mkpkg NextBSD-kernel stage/kernel "NextBSD kernel (FreeBSD 15 KBI, Mach + Darwin
 # --- 3. NextBSD-kernel-extensions (all kexts; amd64-only today) ---
 HAVE_KEXTS=0
 mkdir -p stage/kexts/System/Library/Extensions
-for k in intelethernet-kext intelwifi-kext graphics-kexts; do
+for k in intelethernet-kext intelwifi-kext graphics-kexts nvidia-kexts; do
   [ -f "art/${k}.tar.gz" ] && tar -C stage/kexts/System/Library/Extensions -xzf "art/${k}.tar.gz"
 done
 if ls stage/kexts/System/Library/Extensions/*.kext >/dev/null 2>&1; then
@@ -78,7 +78,7 @@ if ls stage/kexts/System/Library/Extensions/*.kext >/dev/null 2>&1; then
   chown -R 0:0 stage/kexts
   find stage/kexts/System/Library/Extensions -maxdepth 1 -name '*.kext' -exec chmod -R go-w {} +
   echo "=== staged kexts ==="; ls -1 stage/kexts/System/Library/Extensions
-  mkpkg NextBSD-kernel-extensions stage/kexts "NextBSD kernel extensions (IntelEthernet, IntelWiFi, graphics drm kexts + firmware)" "$(dep NextBSD-kernel)"
+  mkpkg NextBSD-kernel-extensions stage/kexts "NextBSD kernel extensions (IntelEthernet, IntelWiFi, drm graphics + NVIDIAGraphics kexts + firmware)" "$(dep NextBSD-kernel)"
   HAVE_KEXTS=1
 else
   echo "=== no kexts for ${ARCH} (arch-specific kexts not built) — skipping NextBSD-kernel-extensions ==="
