@@ -76,9 +76,19 @@ done
 if ls stage/kexts/System/Library/Extensions/*.kext >/dev/null 2>&1; then
   # Tarballs carry their build-runner uid; OSKext requires root:wheel + go-w.
   chown -R 0:0 stage/kexts
-  find stage/kexts/System/Library/Extensions -maxdepth 1 -name '*.kext' -exec chmod -R go-w {} +
-  echo "=== staged kexts ==="; ls -1 stage/kexts/System/Library/Extensions
-  mkpkg NextBSD-kernel-extensions stage/kexts "NextBSD kernel extensions (IntelEthernet, IntelWiFi, drm graphics + NVIDIAGraphics kexts + firmware)" "$(dep NextBSD-kernel)"
+  find stage/kexts/System/Library/Extensions -maxdepth 1 \( -name '*.kext' -o -name '*.bundle' \) -exec chmod -R go-w {} +
+  # NVIDIA userland bundles (NVIDIA<NNN>.bundle) are version-locked storage for the
+  # X11/GL/EGL/GBM driver half. Activate each into the canonical /usr/local paths
+  # (symlinks) so X (auto-detect), ld.so, GLVND and Vulkan find it. Single-branch
+  # static activation — the symlinks ship in the package, targeting the bundle's
+  # final /System location. The activator ships inside the bundle (from kernel-modules).
+  for b in stage/kexts/System/Library/Extensions/*.bundle; do
+    [ -d "$b" ] || continue
+    act="$b/Contents/Resources/nvidia-activate.sh"
+    [ -f "$act" ] && sh "$act" "/System/Library/Extensions/$(basename "$b")" stage/kexts
+  done
+  echo "=== staged kexts + userland ==="; ls -1 stage/kexts/System/Library/Extensions
+  mkpkg NextBSD-kernel-extensions stage/kexts "NextBSD kernel extensions (IntelEthernet, IntelWiFi, drm graphics + NVIDIAGraphics kexts/firmware + NVIDIA userland bundle)" "$(dep NextBSD-kernel)"
   HAVE_KEXTS=1
 else
   echo "=== no kexts for ${ARCH} (arch-specific kexts not built) — skipping NextBSD-kernel-extensions ==="
