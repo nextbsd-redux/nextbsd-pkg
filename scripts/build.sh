@@ -89,6 +89,19 @@ if ls stage/kexts/System/Library/Extensions/*.kext >/dev/null 2>&1; then
   done
   echo "=== staged kexts + userland ==="; ls -1 stage/kexts/System/Library/Extensions
   mkpkg NextBSD-kernel-extensions stage/kexts "NextBSD kernel extensions (IntelEthernet, IntelWiFi, drm graphics + NVIDIAGraphics kexts/firmware + NVIDIA userland bundle)" "$(dep NextBSD-kernel)"
+  # Guard: NextBSD-kernel-extensions MUST stay mesa/llvm-free. The NVIDIA bundle
+  # vendors libgbm.so.1 (nvidia-mkbundle.sh) so pkg records it as shlibs_provided
+  # and adds NO mesa-libs dependency. If a change ever drops that in-package
+  # provide, `pkg create` above resolves libgbm.so.1 -> mesa-libs -> llvm19
+  # (~1.9 GB) on the build VM and silently reintroduces both the bloat and the
+  # /usr/local/lib/libgbm file conflict that evicts this package from images.
+  # Fail the build loudly instead of shipping that.
+  kxpkg=$(ls out/repo/NextBSD-kernel-extensions-*.pkg 2>/dev/null | head -1)
+  if [ -n "$kxpkg" ]; then
+    baddep=$(pkg query -F "$kxpkg" '%dn' 2>/dev/null | grep -iE 'mesa|llvm|gallium' || true)
+    [ -z "$baddep" ] || { echo "ERROR: NextBSD-kernel-extensions gained a forbidden dependency: $baddep" >&2; echo "  libgbm.so.1 must remain shlibs_provided by the bundle (nvidia-mkbundle.sh)." >&2; exit 1; }
+    echo "=== guard OK: NextBSD-kernel-extensions has no mesa/llvm dependency ==="
+  fi
   HAVE_KEXTS=1
 else
   echo "=== no kexts for ${ARCH} (arch-specific kexts not built) — skipping NextBSD-kernel-extensions ==="
