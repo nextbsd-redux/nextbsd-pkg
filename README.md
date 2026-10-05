@@ -33,12 +33,12 @@ Drop a `NextBSD.conf` matching your architecture into `/usr/local/etc/pkg/repos/
 
 ```
 # amd64
-NextBSD: { url: "https://github.com/nextbsd-redux/nextbsd-pkg/releases/download/continuous-amd64", enabled: yes }
+NextBSD: { url: "https://github.com/nextbsd/nextbsd-pkg/releases/download/continuous-amd64", enabled: yes }
 ```
 
 ```
 # arm64
-NextBSD: { url: "https://github.com/nextbsd-redux/nextbsd-pkg/releases/download/continuous-arm64", enabled: yes }
+NextBSD: { url: "https://github.com/nextbsd/nextbsd-pkg/releases/download/continuous-arm64", enabled: yes }
 ```
 
 Then install the whole OS via the meta-package (and upgrade as CI republishes):

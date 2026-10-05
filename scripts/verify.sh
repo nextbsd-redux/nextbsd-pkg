@@ -12,7 +12,7 @@ pkg --version || pkg bootstrap -y
 ARCH="${ARCH:-amd64}"
 # pkg's ABI uses 'aarch64' for 64-bit ARM; the release tag / artifacts use 'arm64'.
 case "$ARCH" in arm64) ABIARCH=aarch64 ;; *) ABIARCH="$ARCH" ;; esac
-BASE="https://github.com/nextbsd-redux/nextbsd-pkg/releases/download/continuous-${ARCH}"
+BASE="https://github.com/nextbsd/nextbsd-pkg/releases/download/continuous-${ARCH}"
 
 mkdir -p /usr/local/etc/pkg/repos
 printf 'FreeBSD: { enabled: no }\n' > /usr/local/etc/pkg/repos/FreeBSD.conf

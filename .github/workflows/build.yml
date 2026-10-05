@@ -1,4 +1,4 @@
-name: NextBSD packages
+name: Build NextBSD packages
 
 # Assembles versioned pkg(8) packages from the component repos' `continuous`
 # artifacts and publishes a FLAT pkg repository to per-arch release tags
@@ -49,11 +49,11 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           mkdir -p art
-          gh release download continuous -R nextbsd-redux/nextbsd-freebsd-compat \
+          gh release download continuous -R nextbsd/nextbsd-freebsd-compat \
             --pattern "nextbsd-base-${ARCH}.tar.gz" --dir art --clobber
-          gh release download continuous -R nextbsd-redux/nextbsd-kernel \
+          gh release download continuous -R nextbsd/nextbsd-kernel \
             --pattern "nextbsd-kernel-${ARCH}.tar.gz" --dir art --clobber
-          gh release download continuous -R nextbsd-redux/nextbsd-userland \
+          gh release download continuous -R nextbsd/nextbsd-userland \
             --pattern "nextbsd-userland-${ARCH}.tar.gz" --dir art --clobber
           # Third-party base programs (sudo, zsh, pico), built against the
           # compat base only and published by nextbsd-contrib.
@@ -110,7 +110,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: continuous-${{ matrix.arch }}
         run: |
-          R=nextbsd-redux/nextbsd-pkg
+          R=nextbsd/nextbsd-pkg
           gh release view "$TAG" -R "$R" >/dev/null 2>&1 \
             || gh release create "$TAG" -R "$R" \
                  --prerelease --title "NextBSD packages — ${{ matrix.arch }} (rolling)" \
